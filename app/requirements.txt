@@ -1,0 +1,4 @@
+git+https://github.com/django/django.git@main
+gunicorn
+psycopg[binary]
+whitenoise[brotli]

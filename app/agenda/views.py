@@ -20,11 +20,25 @@ class DashboardView(LoginRequiredMixin, ListView):
     context_object_name = 'events'
 
     def get_queryset(self):
+        return Event.objects.none()
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
         now = timezone.now()
-        return Event.objects.filter(
+        today_end = now.replace(hour=23, minute=59, second=59)
+
+        upcoming = Event.objects.filter(
             user=self.request.user,
-            start_datetime__gte=now,
-        ).order_by('start_datetime')[:50]
+            completed=False,
+        ).order_by('start_datetime')
+
+        context['events_today'] = upcoming.filter(start_datetime__date=now.date())[:50]
+        context['events_upcoming'] = upcoming.exclude(start_datetime__date=now.date())[:50]
+        context['completed_events'] = Event.objects.filter(
+            user=self.request.user,
+            completed=True,
+        ).order_by('-updated_at')[:10]
+        return context
 
 
 class EventCreateView(LoginRequiredMixin, CreateView):
@@ -55,6 +69,14 @@ class EventDeleteView(LoginRequiredMixin, DeleteView):
 
     def get_queryset(self):
         return Event.objects.filter(user=self.request.user)
+
+
+@login_required
+def mark_complete(request, pk):
+    event = get_object_or_404(Event, pk=pk, user=request.user)
+    event.completed = not event.completed
+    event.save()
+    return JsonResponse({'completed': event.completed})
 
 
 @login_required

@@ -9,4 +9,5 @@ urlpatterns = [
     path('events/<int:pk>/edit/', views.EventUpdateView.as_view(), name='event_edit'),
     path('events/<int:pk>/delete/', views.EventDeleteView.as_view(), name='event_delete'),
     path('voice/', views.voice_create, name='voice_create'),
+    path('events/<int:pk>/complete/', views.mark_complete, name='mark_complete'),
 ]

@@ -14,6 +14,8 @@ class Event(models.Model):
     end_datetime = models.DateTimeField()
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    completed = models.BooleanField(default=False)
+    reminded = models.BooleanField(default=False)
 
     class Meta:
         ordering = ['start_datetime']

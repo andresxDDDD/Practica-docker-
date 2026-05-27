@@ -1,16 +1,14 @@
 let recognition = null;
 let isListening = false;
 let finalText = '';
-let shouldRestart = false;
+let silenceTimer = null;
+const SILENCE_TIMEOUT = 5000;
 
 const listenBtn = document.getElementById('voice-btn');
 const transcriptDisplay = document.getElementById('transcript');
 const voiceResult = document.getElementById('voice-result');
 
 var isSupported = ('SpeechRecognition' in window) || ('webkitSpeechRecognition' in window);
-console.log('Web Speech API soportada:', isSupported);
-if (window.SpeechRecognition) console.log('SpeechRecognition disponible');
-if (window.webkitSpeechRecognition) console.log('webkitSpeechRecognition disponible');
 
 if (!isSupported) {
     if (listenBtn) {
@@ -19,74 +17,92 @@ if (!isSupported) {
     }
 } else {
     var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    recognition = new SpeechRecognition();
-    recognition.lang = 'es-MX';
-    recognition.interimResults = true;
-    recognition.continuous = false;
-    recognition.maxAlternatives = 1;
 
-    recognition.onresult = function (event) {
-        var interimText = '';
-        for (var i = event.resultIndex; i < event.results.length; i++) {
-            var result = event.results[i];
-            if (result.isFinal) {
-                finalText += result[0].transcript + ' ';
-                console.log('Final:', result[0].transcript);
-            } else {
-                interimText += result[0].transcript;
-                console.log('Interim:', result[0].transcript);
+    function createRecognition() {
+        var sr = new SpeechRecognition();
+        sr.lang = 'es-MX';
+        sr.interimResults = true;
+        sr.continuous = true;
+        sr.maxAlternatives = 1;
+
+        sr.onresult = function (event) {
+            var interimText = '';
+            for (var i = event.resultIndex; i < event.results.length; i++) {
+                var result = event.results[i];
+                if (result.isFinal) {
+                    finalText += result[0].transcript + ' ';
+                } else {
+                    interimText += result[0].transcript;
+                }
             }
-        }
-        if (transcriptDisplay) {
-            transcriptDisplay.textContent = finalText + interimText;
-        }
-    };
+            if (transcriptDisplay) {
+                transcriptDisplay.textContent = finalText + interimText;
+            }
+            resetSilenceTimer();
+        };
 
-    recognition.onerror = function (event) {
-        console.error('SpeechRecognition error:', event.error, event.message || '');
-        isListening = false;
-        shouldRestart = false;
+        sr.onerror = function (event) {
+            if (event.error === 'not-allowed') {
+                isListening = false;
+                clearTimeout(silenceTimer);
+                resetUI();
+                showMessage('Permiso de micrófono denegado. Revisa los permisos del navegador.', 'error');
+            } else if (event.error === 'network') {
+                showMessage('Error de red al conectar con el servicio de voz.', 'error');
+            } else if (event.error === 'audio-capture') {
+                showMessage('No se encontró micrófono.', 'error');
+            }
+        };
+
+        sr.onend = function () {
+            if (isListening) {
+                recognition = createRecognition();
+                try { recognition.start(); } catch (e) {}
+            }
+        };
+
+        return sr;
+    }
+
+    recognition = createRecognition();
+}
+
+function resetSilenceTimer() {
+    clearTimeout(silenceTimer);
+    silenceTimer = setTimeout(function () {
+        if (isListening) {
+            autoStopAndSend();
+        }
+    }, SILENCE_TIMEOUT);
+}
+
+function stopAndSend() {
+    clearTimeout(silenceTimer);
+    isListening = false;
+    if (recognition) {
+        try { recognition.stop(); } catch (e) {}
+    }
+    var text = finalText.trim();
+    if (text) {
+        sendToServer(text);
+    } else {
         resetUI();
-        var tip = '';
-        if (event.error === 'not-allowed') {
-            tip = 'Permiso de micrófono denegado. Revisa los permisos del navegador.';
-        } else if (event.error === 'no-speech') {
-            tip = 'No se detectó voz.';
-        } else if (event.error === 'network') {
-            tip = 'Error de red al conectar con el servicio de voz.';
-        } else if (event.error === 'audio-capture') {
-            tip = 'No se encontró micrófono.';
-        } else if (event.error === 'service-not-allowed') {
-            tip = 'Servicio de voz no permitido en este navegador.';
-        } else if (event.error === 'aborted') {
-            return;
-        } else {
-            tip = 'Error: ' + event.error;
-        }
-        showMessage(tip + ' Intenta de nuevo.', 'error');
-    };
+    }
+}
 
-    recognition.onend = function () {
-        console.log('Recognition ended, shouldRestart:', shouldRestart, 'isListening:', isListening, 'finalText:', finalText);
-        if (shouldRestart) {
-            try {
-                recognition.start();
-                console.log('Recognition restarted');
-            } catch (e) {
-                console.error('Failed to restart:', e);
-            }
-        } else {
-            isListening = false;
-            resetUI();
-            if (finalText.trim()) {
-                sendToServer(finalText.trim());
-            }
-        }
-    };
+function autoStopAndSend() {
+    isListening = false;
+    if (recognition) {
+        try { recognition.stop(); } catch (e) {}
+    }
+    resetUI();
+    var text = finalText.trim();
+    if (text) {
+        sendToServer(text);
+    }
 }
 
 function toggleListening() {
-    console.log('toggleListening, current state - isListening:', isListening);
     if (isListening) {
         stopAndSend();
     } else {
@@ -95,42 +111,19 @@ function toggleListening() {
 }
 
 function startListening() {
-    if (!recognition) {
-        console.error('No recognition object available');
-        return;
-    }
     finalText = '';
-    shouldRestart = true;
     isListening = true;
     if (transcriptDisplay) transcriptDisplay.textContent = '';
     listenBtn.classList.add('listening');
     listenBtn.innerHTML = '<span class="animate-pulse">●</span> Escuchando...';
     document.getElementById('listening-indicator')?.classList.remove('hidden');
+    showMessage('', '');
     try {
         recognition.start();
-        console.log('Recognition started');
     } catch (e) {
-        console.error('Error starting recognition:', e);
-    }
-}
-
-function stopAndSend() {
-    console.log('stopAndSend called');
-    shouldRestart = false;
-    isListening = false;
-    if (recognition) {
-        try {
-            recognition.stop();
-            console.log('Recognition stopped gracefully');
-        } catch (e) {
-            console.error('Error stopping recognition:', e);
-        }
-    }
-    var text = finalText.trim();
-    if (text) {
-        sendToServer(text);
-    } else {
+        isListening = false;
         resetUI();
+        showMessage('Error al iniciar el micrófono.', 'error');
     }
 }
 
@@ -142,8 +135,6 @@ function resetUI() {
 
 function sendToServer(text) {
     if (!text) return;
-
-    console.log('Sending to server:', text);
     if (transcriptDisplay) transcriptDisplay.textContent = 'Procesando...';
 
     fetch('/voice/', {
@@ -155,13 +146,10 @@ function sendToServer(text) {
         body: JSON.stringify({ text: text }),
     })
         .then(function (response) {
-            if (!response.ok) {
-                throw new Error('HTTP ' + response.status);
-            }
+            if (!response.ok) throw new Error('HTTP ' + response.status);
             return response.json();
         })
         .then(function (data) {
-            console.log('Server response:', data);
             if (data.error) {
                 showMessage('Error: ' + data.error, 'error');
                 if (transcriptDisplay) transcriptDisplay.textContent = '';
@@ -178,9 +166,8 @@ function sendToServer(text) {
             if (transcriptDisplay) transcriptDisplay.textContent = '';
             setTimeout(function () { location.reload(); }, 1500);
         })
-        .catch(function (err) {
-            console.error('Fetch error:', err);
-            showMessage('Error de conexión: ' + err.message, 'error');
+        .catch(function () {
+            showMessage('Error de conexión con el servidor.', 'error');
             if (transcriptDisplay) transcriptDisplay.textContent = '';
         });
 }
@@ -196,13 +183,14 @@ function formatDate(isoString) {
 function showMessage(msg, type) {
     var el = document.getElementById('voice-message');
     if (!el) return;
+    if (!msg) { el.classList.add('hidden'); return; }
     el.textContent = msg;
     el.className = 'mt-4 p-3 rounded-lg text-sm font-medium ' +
         (type === 'error'
             ? 'bg-red-100 text-red-700'
             : 'bg-green-100 text-green-700');
     el.classList.remove('hidden');
-    setTimeout(function () { el.classList.add('hidden'); }, 5000);
+    setTimeout(function () { el.classList.add('hidden'); }, 8000);
 }
 
 function sendTextCommand() {
@@ -217,15 +205,12 @@ document.addEventListener('DOMContentLoaded', function () {
     var input = document.getElementById('text-command');
     if (input) {
         input.addEventListener('keydown', function (e) {
-            if (e.key === 'Enter') {
-                sendTextCommand();
-            }
+            if (e.key === 'Enter') sendTextCommand();
         });
     }
     var btn = document.getElementById('voice-btn');
     if (btn) {
         btn.addEventListener('click', toggleListening);
-        console.log('Voice button listener attached');
     }
 });
 

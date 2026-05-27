@@ -1,0 +1,31 @@
+<div class="bg-white rounded-xl border border-gray-100 shadow-sm p-4 hover:shadow-md transition"
+     data-event-id="{{ event.id }}"
+     data-start="{{ event.start_datetime|date:'c' }}">
+    <div class="flex items-start justify-between gap-4">
+        <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2 flex-wrap">
+                <h3 class="font-semibold text-gray-800 truncate">{{ event.title }}</h3>
+                <span class="event-countdown text-xs font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-500"></span>
+                <span class="event-past hidden text-xs font-medium px-2 py-0.5 rounded-full bg-red-100 text-red-600">Atrasado</span>
+            </div>
+            {% if event.description %}
+                <p class="text-sm text-gray-500 mt-1 line-clamp-2">{{ event.description }}</p>
+            {% endif %}
+            <div class="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-gray-400">
+                <span>Inicio: {{ event.start_datetime|date:"d M Y, H:i" }}</span>
+                <span>Fin: {{ event.end_datetime|date:"d M Y, H:i" }}</span>
+            </div>
+        </div>
+        <div class="flex gap-1 shrink-0 items-start">
+            <button onclick="toggleComplete({{ event.id }}, this)"
+                    class="text-green-600 hover:text-green-800 text-sm px-2 py-1 hover:bg-green-50 rounded transition"
+                    title="Marcar como completado">
+                ✅
+            </button>
+            <a href="{% url 'agenda:event_edit' event.pk %}"
+               class="text-indigo-600 hover:text-indigo-800 text-sm px-2 py-1 hover:bg-indigo-50 rounded transition">Editar</a>
+            <a href="{% url 'agenda:event_delete' event.pk %}"
+               class="text-red-500 hover:text-red-700 text-sm px-2 py-1 hover:bg-red-50 rounded transition">Eliminar</a>
+        </div>
+    </div>
+</div>

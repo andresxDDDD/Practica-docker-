@@ -25,19 +25,20 @@ class DashboardView(LoginRequiredMixin, ListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         now = timezone.now()
-        today_end = now.replace(hour=23, minute=59, second=59)
 
-        upcoming = Event.objects.filter(
+        pending = Event.objects.filter(
             user=self.request.user,
             completed=False,
+            start_datetime__gte=now,
         ).order_by('start_datetime')
 
-        context['events_today'] = upcoming.filter(start_datetime__date=now.date())[:50]
-        context['events_upcoming'] = upcoming.exclude(start_datetime__date=now.date())[:50]
-        context['completed_events'] = Event.objects.filter(
+        context['events_today'] = pending.filter(start_datetime__date=now.date())[:50]
+        context['events_upcoming'] = pending.exclude(start_datetime__date=now.date())[:50]
+
+        context['history_events'] = Event.objects.filter(
             user=self.request.user,
-            completed=True,
-        ).order_by('-updated_at')[:10]
+            start_datetime__lt=now,
+        ).order_by('-start_datetime')[:30]
         return context
 
 
